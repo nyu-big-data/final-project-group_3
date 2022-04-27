@@ -38,23 +38,18 @@ def main(spark, netID):
    print('filter out the rating within 0.5-5')
    ratings= ratings.filter(ratings.rating <=5).filter( ratings.rating >=0.5) 
 
-
    # filter out the movies with more than 10 records 
    temp= ratings.groupby('movieId').count()
    temp= temp.filter( temp['count'] >=10) 
    base_ratings= ratings.where(ratings.movieId.isin([i for i in temp.select('movieId').distinct()])) 
-
 
    # filter out the users with more than 10 records 
    temp= base_ratings.groupby('userId').count()
    temp= temp.filter( temp['count'] >=10) 
    base_ratings= base_ratings.where(base_ratings.userId.isin([i for i in temp.select('userId').distinct()])) 
 
-
    print('Splitting into training, validation, and testing set based on user_Id')
    train_id, val_id, test_id = [i.rdd.flatMap(lambda x: x).collect() for i in base_ratings.select('userId').distinct().randomSplit([0.6, 0.2, 0.2], 1024)]
-
-
    train_dt = base_ratings.where(base_ratings.userId.isin(train_id))
    val_dt = base_ratings.where(base_ratings.userId.isin(val_id))
    test_dt = base_ratings.where(base_ratings.userId.isin(test_id)) 
@@ -63,46 +58,42 @@ def main(spark, netID):
    window = Window.partitionBy('userId').orderBy('timestamp')
    val_dt = (val_dt.select("userId","movieId","rating", 'timestamp', func.row_number().over(window).alias("order_num")))
 
-
    val_dt.createOrReplaceTempView('val_dt')
    val_to_train= spark.sql('select val_dt.userId, val_dt.movieId, val_dt.rating from val_dt left join\
-                         (select userId, count(*) total_num from  val_dt group by userId)temp \
-                         on val_dt.userId= temp.userId where order_num <= cast( total_num/2 as int)')
+                            (select userId, count(*) total_num from  val_dt group by userId)temp \
+                            on val_dt.userId= temp.userId where order_num <= cast( total_num/2 as int)')
 
    train_dt= train_dt.drop('timestamp')
    train_dt.createOrReplaceTempView('train_dt') 
-
-
    final_train = train_dt.union(val_to_train)
 
    print('Adjusting training and test set')
    window = Window.partitionBy('userId').orderBy('timestamp')
-   #test_dt = (test_dt.select("userId","movieId","rating", func.row_number().over(window).alias("order_num")))
-
+   test_dt = (test_dt.select("userId","movieId","rating", func.row_number().over(window).alias("order_num")))
 
    test_dt.createOrReplaceTempView('test_dt') 
    test_to_train= spark.sql('select test_dt.userId, test_dt.movieId, test_dt.rating \
-                          from test_dt  \
-                          left join (select userId, count(*) total_num from test_dt group by userId) temp\
-                         on test_dt.userId = temp.userId where order_num <= cast( total_num/2 as int)')
-
+                             from test_dt  \
+                             left join (select userId, count(*) total_num from test_dt group by userId) temp\
+                            on test_dt.userId = temp.userId where order_num <= cast( total_num/2 as int)')
    final_train = final_train.union(test_to_train)
-   final_train.repartition(500).write.mode('overwrite').parquet('train_data.parquet')
+
+   print('Create parquet for train, validation, test set')
+   final_train.createOrReplaceTempView('final_train')
+   final_train.repartition(5).write.mode('overwrite').parquet('train_data.parquet')
 
    final_val= spark.sql('select val_dt.userId, val_dt.movieId, val_dt.rating from val_dt left join (select userId, count(*) total_num from  val_dt group by userId)temp \
-                         on val_dt.userId= temp.userId where order_num > cast( total_num/2 as int)')
+                            on val_dt.userId= temp.userId where order_num > cast( total_num/2 as int)')
    final_val.createOrReplaceTempView('final_val')
    final_val= spark.sql('select * from final_val where movieId in (select distinct movieId from final_train)')
-   final_val.repartition(500).write.mode('overwrite').parquet('val_data.parquet')
+   final_val.repartition(5).write.mode('overwrite').parquet('val_data.parquet')
 
    final_test= spark.sql('select test_dt.userId, test_dt.movieId, test_dt.rating from test_dt left join\
-                         (select userId, count(*) total_num from test_dt group by userId) temp\
-                         on test_dt.userId= temp.userId where order_num > cast( total_num/2 as int)')
+                            (select userId, count(*) total_num from test_dt group by userId) temp\
+                            on test_dt.userId= temp.userId where order_num > cast( total_num/2 as int)')
    final_test.createOrReplaceTempView('final_test')
    final_test= spark.sql('select * from final_test where movieId in (select distinct movieId from final_train)')
-   final_test.repartition(500).write.mode('overwrite').parquet('test_data.parquet')
-
-
+   final_test.repartition(5).write.mode('overwrite').parquet('test_data.parquet')
 
 if __name__ == "__main__":
 
