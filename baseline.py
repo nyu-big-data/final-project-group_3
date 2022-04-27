@@ -36,7 +36,6 @@ def main(spark, netID):
     # Give the dataframe a temporary view so we can run SQL queries
     ratings.createOrReplaceTempView('ratings')
     movies.createOrReplaceTempView('movies')
-
     # data quality check
     # check duplicate
     print('check duplicate')
@@ -50,20 +49,18 @@ def main(spark, netID):
 
     # check data range
     print('filter out the rating within 0.5-5')
-    ratings= ratings.filter(ratings.rating <=5).filter( ratings.rating >=0.5).select('userId','movieId','rating')
-
-    print('Splitting into training, validation, and testing set based on user_Id')
-    train_id, val_id, test_id = [i.rdd.flatMap(lambda x: x).collect() for i in ratings.select('userId').distinct().randomSplit([0.6, 0.2, 0.2], 1024)]
-    train_dt = ratings.where(ratings.userId.isin(train_id))
-    val_dt = ratings.where(ratings.userId.isin(val_id))
-    test_dt = ratings.where(ratings.userId.isin(test_id)) 
-
+    ratings= ratings.filter(ratings.rating <=5).filter( ratings.rating >=0.5) 
 
     # filter out the movies with more than 10 records 
     temp= ratings.groupby('movieId').count()
     temp= temp.filter( temp['count'] >=10) 
     base_ratings= ratings.where(ratings.movieId.isin([i for i in temp.select('movieId').distinct()])) 
-    
+
+    # filter out the users with more than 10 records 
+    temp= base_ratings.groupby('userId').count()
+    temp= temp.filter( temp['count'] >=10) 
+    base_ratings= base_ratings.where(ratings.movieId.isin([i for i in temp.select('userId').distinct()])) 
+
     print('Splitting into training, validation, and testing set based on user_Id')
     train_id, val_id, test_id = [i.rdd.flatMap(lambda x: x).collect() for i in base_ratings.select('userId').distinct().randomSplit([0.6, 0.2, 0.2], 1024)]
     train_dt = base_ratings.where(base_ratings.userId.isin(train_id))
@@ -74,49 +71,52 @@ def main(spark, netID):
     val_dt.createOrReplaceTempView('val_dt')
     test_dt.createOrReplaceGlobalTempView('test_dt')
 
+    print('Find the top 100 popular movies from the training set')
     rating_num= train_dt.groupBy('movieId', 'rating').count()  
     mul_udf = udf(lambda x, y: x*y , FloatType()) 
     rating_num = rating_num.withColumn("result", mul_udf(rating_num['rating'], rating_num['count']))
-
-
     rating_num.createOrReplaceTempView('rating_num')
-    top_1000_movie= spark.sql('select movieId, cast(sum(result) as float)/sum(count)  weight_socre \
+
+    # select out the top 100 movies
+    top_100_movie= spark.sql('select movieId, cast(sum(result) as float)/sum(count)  weight_socre \
                                 from  rating_num \
                                 group by movieId \
-                                order by weight_socre desc limit 1000')
+                                order by weight_socre desc limit 100')
 
     filter_val = val_dt.where(val_dt.movieId.isin([i for i in train_dt.select('movieId').distinct()])) 
     filter_test = test_dt.where(test_dt.movieId.isin([i for i in train_dt.select('movieId').distinct()]))
-    
-    # result on the val data
-    val_users = filter_val.select("userId").distinct()
-    rec_list = top_1000_movie.select(top_1000_movie.movieId).agg(func.collect_list('movieId')) 
 
+    print('result on validation set')
+    val_users = filter_val.select("userId").distinct()
+    rec_list = top_100_movie.select(top_100_movie.movieId).agg(func.collect_list('movieId')) 
 
     rec= val_users.rdd.cartesian(rec_list.rdd).map(lambda row: (row[0][0], row[1][0])).toDF() 
     pred = rec.select(rec._1.alias('userId'), rec._2.alias('pred')) 
-    true = filter_val.groupby('userId').agg(func.collect_set('movieId').alias('true'))
-
+    true = filter_val.groupby('userId').orderBy(filter_val['rating'].desc()).agg(func.collect_set('movieId').alias('true'))
     predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2]))
 
+    val_map = RankingMetrics(predAndtrue).meanAveragePrecisionAt(100)
+    val_recall = RankingMetrics(predAndtrue).recallAt(100)
 
-    val_map = RankingMetrics(predAndtrue).meanAveragePrecision 
-
-    # results on test set
+    print('result on test set')
     test_users = filter_test.select("userId").distinct()
-    rec_list = top_1000_movie.select(top_1000_movie.movieId).agg(func.collect_list('movieId')) 
-
-    ### error starts here:!!!!!
+    rec_list = top_100_movie.select(top_100_movie.movieId).agg(func.collect_list('movieId')) 
     rec= test_users.rdd.cartesian(rec_list.rdd).map(lambda row: (row[0][0], row[1][0])).toDF() 
     pred = rec.select(rec._1.alias('userId'), rec._2.alias('pred')) 
-    true = filter_test.groupby('userId').agg(func.collect_set('movieId').alias('true'))
-
+    true = filter_test.groupby('userId').orderBy(filter_test['rating'].desc()).agg(func.collect_set('movieId').alias('true'))
     predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2]))
-    test_map = RankingMetrics(predAndtrue).meanAveragePrecision 
 
-    # Use Mean Average Precision as evaluation metric
+    test_map = RankingMetrics(predAndtrue).meanAveragePrecisionAt(100)
+    test_recall = RankingMetrics(predAndtrue).recallAt(100)
+
+    print('Metric Performance on validation and test')
+    # Use MAP as evaluation metric
     print(f'MAP on validation set = {val_map}') 
     print(f'MAP on test set = {test_map}') 
+
+    # Use Recall as evaluation metric
+    print(f'recall on validation set = {val_recall}') 
+    print(f'recall on test set = {test_recall}') 
 
 if __name__ == "__main__":
 
