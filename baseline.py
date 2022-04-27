@@ -59,7 +59,7 @@ def main(spark, netID):
     # filter out the users with more than 10 records 
     temp= base_ratings.groupby('userId').count()
     temp= temp.filter( temp['count'] >=10) 
-    base_ratings= base_ratings.where(ratings.movieId.isin([i for i in temp.select('userId').distinct()])) 
+    base_ratings= base_ratings.where(base_ratings.userId.isin([i for i in temp.select('userId').distinct()])) 
 
     print('Splitting into training, validation, and testing set based on user_Id')
     train_id, val_id, test_id = [i.rdd.flatMap(lambda x: x).collect() for i in base_ratings.select('userId').distinct().randomSplit([0.6, 0.2, 0.2], 1024)]
@@ -95,8 +95,7 @@ def main(spark, netID):
     true = filter_val.orderBy(filter_val['rating'].desc()).groupby('userId').agg(func.collect_set('movieId').alias('true'))
     predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2]))
 
-    val_map = RankingMetrics(predAndtrue).meanAveragePrecisionAt(100)
-    val_recall = RankingMetrics(predAndtrue).recallAt(100)
+    val_map = RankingMetrics(predAndtrue).precisionAt(100) 
 
     print('result on test set')
     test_users = filter_test.select("userId").distinct()
@@ -106,8 +105,7 @@ def main(spark, netID):
     true = filter_test.orderBy(filter_test['rating'].desc()).groupby('userId').agg(func.collect_set('movieId').alias('true'))
     predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2]))
 
-    test_map = RankingMetrics(predAndtrue).meanAveragePrecisionAt(100)
-    test_recall = RankingMetrics(predAndtrue).recallAt(100)
+    test_map = RankingMetrics(predAndtrue).precisionAt(100) 
 
     print('Metric Performance on validation and test')
     # Use MAP as evaluation metric
@@ -115,8 +113,8 @@ def main(spark, netID):
     print(f'MAP on test set = {test_map}') 
 
     # Use Recall as evaluation metric
-    print(f'recall on validation set = {val_recall}') 
-    print(f'recall on test set = {test_recall}') 
+    #print(f'recall on validation set = {val_recall}') 
+    #print(f'recall on test set = {test_recall}') 
 
 if __name__ == "__main__":
 
