@@ -48,7 +48,7 @@ def main(spark, netID):
    # filter out the users with more than 10 records 
    temp= base_ratings.groupby('userId').count()
    temp= temp.filter( temp['count'] >=10) 
-   base_ratings= base_ratings.where(ratings.movieId.isin([i for i in temp.select('userId').distinct()])) 
+   base_ratings= base_ratings.where(base_ratings.userId.isin([i for i in temp.select('userId').distinct()])) 
 
 
    print('Splitting into training, validation, and testing set based on user_Id')
