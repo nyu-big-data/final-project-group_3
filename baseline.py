@@ -30,8 +30,8 @@ def main(spark, netID):
     ''' 
 
     # Load the boats.txt and sailors.json data into DataFrame 
-    ratings = spark.read.csv(f'hdfs:/user/{netID}/ratings.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
-    movies = spark.read.csv(f'hdfs:/user/{netID}/movies.csv', schema='movieId INT,title STRING, genres STRING')
+    ratings = spark.read.csv(f'hdfs:/user/lc4886/ratings.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
+    movies = spark.read.csv(f'hdfs:/user/lc4886/movies.csv', schema='movieId INT,title STRING, genres STRING')
    
     # Give the dataframe a temporary view so we can run SQL queries
     ratings.createOrReplaceTempView('ratings')
@@ -92,7 +92,7 @@ def main(spark, netID):
 
     rec= val_users.rdd.cartesian(rec_list.rdd).map(lambda row: (row[0][0], row[1][0])).toDF() 
     pred = rec.select(rec._1.alias('userId'), rec._2.alias('pred')) 
-    true = filter_val.groupby('userId').orderBy(filter_val['rating'].desc()).agg(func.collect_set('movieId').alias('true'))
+    true = filter_val.orderBy(filter_val['rating'].desc()).groupby('userId').agg(func.collect_set('movieId').alias('true'))
     predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2]))
 
     val_map = RankingMetrics(predAndtrue).meanAveragePrecisionAt(100)
@@ -103,7 +103,7 @@ def main(spark, netID):
     rec_list = top_100_movie.select(top_100_movie.movieId).agg(func.collect_list('movieId')) 
     rec= test_users.rdd.cartesian(rec_list.rdd).map(lambda row: (row[0][0], row[1][0])).toDF() 
     pred = rec.select(rec._1.alias('userId'), rec._2.alias('pred')) 
-    true = filter_test.groupby('userId').orderBy(filter_test['rating'].desc()).agg(func.collect_set('movieId').alias('true'))
+    true = filter_test.orderBy(filter_test['rating'].desc()).groupby('userId').agg(func.collect_set('movieId').alias('true'))
     predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2]))
 
     test_map = RankingMetrics(predAndtrue).meanAveragePrecisionAt(100)
