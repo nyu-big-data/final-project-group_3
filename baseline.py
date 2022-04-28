@@ -30,7 +30,7 @@ def main(spark, netID):
     ''' 
 
     # Load the boats.txt and sailors.json data into DataFrame 
-    ratings = spark.read.csv(f'hdfs:/user/lc4866/ratings.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
+    ratings = spark.read.csv(f'hdfs:/user/lc4866/ratings-large.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
     movies = spark.read.csv(f'hdfs:/user/lc4866/movies.csv', schema='movieId INT,title STRING, genres STRING')
    
     # Give the dataframe a temporary view so we can run SQL queries
@@ -58,7 +58,7 @@ def main(spark, netID):
 
     # filter out the users with more than 10 records 
     temp= base_ratings.groupby('userId').count()
-    temp= temp.filter( temp['count'] >=10) 
+    temp= temp.filter( temp['count'] >=100) 
     base_ratings= base_ratings.where(base_ratings.userId.isin([i for i in temp.select('userId').distinct()])) 
 
     print('Splitting into training, validation, and testing set based on user_Id')
