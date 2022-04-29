@@ -24,10 +24,8 @@ def main(spark, netID):
       model = als.fit(train)
       return model 
 
-
-
-    regs = [0.01,0.05,0.1,0.2,0.3,0.4,0.5]
-    ranks = [10, 20, 30, 40, 50]
+    regs = [0.01, 0.1]
+    ranks = [50,100,300,500]
 
     best_map=0
     best_rank=0
@@ -49,11 +47,23 @@ def main(spark, netID):
             best_rank = rank
             best_reg = reg 
 
-    best_als= als_model(train, best_rank, best_reg)  
+    # best_als= als_model(train, best_rank, best_reg)  
+    # test_users = test.select("userId").distinct()
+    # test_users_rec = als.recommendForUserSubset(test_users, 100) 
+    # pred= test_users_rec.select(test_users_rec['userId'], test_users_rec.recommendations['movieId'].alias('pred'))
+    # true = test.orderBy(test['rating'].desc()).groupby('userId').agg(func.collect_set('movieId')).a
+
+    best_als= als_model(train, best_rank, best_reg)
     test_users = test.select("userId").distinct()
-    test_users_rec = als.recommendForUserSubset(test_users, 100) 
+    test_users_rec = best_als.recommendForUserSubset(test_users, 100) 
     pred= test_users_rec.select(test_users_rec['userId'], test_users_rec.recommendations['movieId'].alias('pred'))
-    true = test.orderBy(test['rating'].desc()).groupby('userId').agg(func.collect_set('movieId')).a
+    true = test.orderBy(test['rating'].desc()).groupby('userId').agg(func.collect_set('movieId').alias('true'))
+    # print("pred: \n", pred.show())
+    # print("true: \n", true.show())
+    # pred.join(true, 'userId').show(10)
+    predAndtrue = pred.join(true, 'userId').rdd.map(lambda row: (row[1], row[2])) 
+    test_map = RankingMetrics(predAndtrue).precisionAt(100)
+    print(f"using best reg ={best_reg}, best rank = {best_rank}, get test MAP = {test_map}")
 
 
 
