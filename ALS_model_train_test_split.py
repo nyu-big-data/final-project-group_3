@@ -17,8 +17,8 @@ def main(spark, netID):
    ''' 
 
    # Load the boats.txt and sailors.json data into DataFrame 
-   ratings = spark.read.csv(f'hdfs:/user/lc4866/ratings.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
-   movies = spark.read.csv(f'hdfs:/user/lc4866/movies.csv', schema='movieId INT,title STRING, genres STRING')
+   ratings = spark.read.csv(f'hdfs:/user/lc4866/ratings-large.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
+   # movies = spark.read.csv(f'hdfs:/user/lc4866/movies.csv', schema='movieId INT,title STRING, genres STRING')
   
    # Give the dataframe a temporary view so we can run SQL queries
    ratings.createOrReplaceTempView('ratings')
@@ -80,20 +80,20 @@ def main(spark, netID):
 
    print('Create parquet for train, validation, test set')
    final_train.createOrReplaceTempView('final_train')
-   final_train.repartition(5).write.mode('overwrite').parquet('train_data.parquet')
+   final_train.repartition(5).write.mode('overwrite').parquet('train_data-large.parquet')
 
    final_val= spark.sql('select val_dt.userId, val_dt.movieId, val_dt.rating from val_dt left join (select userId, count(*) total_num from  val_dt group by userId)temp \
                             on val_dt.userId= temp.userId where order_num > cast( total_num/2 as int)')
    final_val.createOrReplaceTempView('final_val')
    final_val= spark.sql('select * from final_val where movieId in (select distinct movieId from final_train)')
-   final_val.repartition(5).write.mode('overwrite').parquet('val_data.parquet')
+   final_val.repartition(5).write.mode('overwrite').parquet('val_data-large.parquet')
 
    final_test= spark.sql('select test_dt.userId, test_dt.movieId, test_dt.rating from test_dt left join\
                             (select userId, count(*) total_num from test_dt group by userId) temp\
                             on test_dt.userId= temp.userId where order_num > cast( total_num/2 as int)')
    final_test.createOrReplaceTempView('final_test')
    final_test= spark.sql('select * from final_test where movieId in (select distinct movieId from final_train)')
-   final_test.repartition(5).write.mode('overwrite').parquet('test_data.parquet')
+   final_test.repartition(5).write.mode('overwrite').parquet('test_data-large.parquet')
 
 if __name__ == "__main__":
 
