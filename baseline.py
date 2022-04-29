@@ -31,11 +31,11 @@ def main(spark, netID):
 
     # Load the boats.txt and sailors.json data into DataFrame 
     ratings = spark.read.csv(f'hdfs:/user/lc4866/ratings-large.csv', schema='userId INT,  movieId INT, rating FLOAT, timestamp INT')
-    movies = spark.read.csv(f'hdfs:/user/lc4866/movies.csv', schema='movieId INT,title STRING, genres STRING')
+    #movies = spark.read.csv(f'hdfs:/user/lc4866/movies.csv', schema='movieId INT,title STRING, genres STRING')
    
     # Give the dataframe a temporary view so we can run SQL queries
     ratings.createOrReplaceTempView('ratings')
-    movies.createOrReplaceTempView('movies')
+    #movies.createOrReplaceTempView('movies')
     # data quality check
     # check duplicate
     print('check duplicate')
