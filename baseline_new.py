@@ -22,9 +22,9 @@ def main(spark, netID):
     netID : string, netID of student to find files in HDFS
     ''' 
 
-    train_dt= spark.read.parquet('hdfs:/user/sj2539/train_data_large.parquet')
-    val_dt= spark.read.parquet('hdfs:/user/sj2539/val_data_large.parquet')
-    test_dt= spark.read.parquet('hdfs:/user/sj2539/test_data_large.parquet')
+    train_dt= spark.read.parquet('hdfs:/user/yf1451/train_data.parquet')
+    val_dt= spark.read.parquet('hdfs:/user/yf1451/val_data.parquet')
+    test_dt= spark.read.parquet('hdfs:/user/yf1451/test_data.parquet')
 
     train_dt.createOrReplaceTempView('train_dt')
     val_dt.createOrReplaceTempView('val_dt')
@@ -37,7 +37,7 @@ def main(spark, netID):
     rating_num.createOrReplaceTempView('rating_num')
 
     # select out the top 100 movies
-    top_100_movie= spark.sql('select movieId, cast(sum(result) as float)/sum(count)  weight_socre \
+    top_100_movie= spark.sql('select movieId, cast(sum(result) as float)/(sum(count)+0.01)  weight_socre \
                                 from  rating_num \
                                 group by movieId \
                                 order by weight_socre desc limit 100')
