@@ -43,7 +43,7 @@ def main(spark, netID):
               nonnegative = True, 
              implicitPrefs = True)
     model = als.fit(using_data)
-    predictions = model.transform(using_data)
+    predictions = model.transform(test_data)
     # scoreAndLabels = val_data.join(predictions,'userId').rdd.map(lambda tup: (tup[2], tup[4]))
 
 
